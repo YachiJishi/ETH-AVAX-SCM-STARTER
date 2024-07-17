@@ -3,17 +3,26 @@ pragma solidity ^0.8.9;
 
 contract Assessment {
     address payable public owner;
-    uint256 public balance;
+    uint256 public totalStaked;
     bool public isFrozen;
 
-    event Deposit(uint256 amount);
-    event Withdraw(uint256 amount);
+    struct Stake {
+        uint256 amount;
+        uint256 lastStakeTime;
+    }
+
+    mapping(address => Stake) public stakes;
+    address[] public stakers; // Maintain a list of stakers
+
+    event Staked(address indexed user, uint256 amount);
+    event Unstaked(address indexed user, uint256 amount);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event AccountFrozen(bool isFrozen);
+    event RewardDistributed(address indexed user, uint256 reward);
 
-    constructor(uint256 initBalance) payable {
-        owner = payable(msg.sender);
-        balance = initBalance;
+    constructor() {
+        owner = payable(msg.sender); // Use payable here to initialize owner
+        totalStaked = 0;
         isFrozen = false;
     }
 
@@ -27,26 +36,63 @@ contract Assessment {
         _;
     }
 
-    function deposit(uint256 _amount) public payable onlyOwner notFrozen {
-        balance = add(balance, _amount);
-        emit Deposit(_amount);
+    receive() external payable {
+        revert("Contract does not accept direct payments");
     }
 
-    function getBalance() public view returns(uint256) {
-        return balance;
-    }
+    function stake() public payable notFrozen {
+        require(msg.value > 0, "Stake amount must be greater than zero");
+        
+        stakes[msg.sender].amount += msg.value;
+        stakes[msg.sender].lastStakeTime = block.timestamp;
+        totalStaked += msg.value;
 
-    error InsufficientBalance(uint256 balance, uint256 withdrawAmount);
-
-    function withdraw(uint256 _withdrawAmount) public onlyOwner notFrozen {
-        if (balance < _withdrawAmount) {
-            revert InsufficientBalance({
-                balance: balance,
-                withdrawAmount: _withdrawAmount
-            });
+        // Add the user to the list of stakers if not already added
+        if (stakes[msg.sender].amount == msg.value) {
+            stakers.push(msg.sender);
         }
-        balance = subtract(balance, _withdrawAmount);
-        emit Withdraw(_withdrawAmount);
+
+        emit Staked(msg.sender, msg.value);
+    }
+
+    function unstake(uint256 _amount) public notFrozen {
+        require(stakes[msg.sender].amount >= _amount, "Insufficient staked balance");
+
+        stakes[msg.sender].amount -= _amount;
+        totalStaked -= _amount;
+        payable(msg.sender).transfer(_amount);
+
+        // Remove the user from the list of stakers if their stake becomes zero
+        if (stakes[msg.sender].amount == 0) {
+            for (uint i = 0; i < stakers.length; i++) {
+                if (stakers[i] == msg.sender) {
+                    stakers[i] = stakers[stakers.length - 1];
+                    stakers.pop();
+                    break;
+                }
+            }
+        }
+
+        emit Unstaked(msg.sender, _amount);
+    }
+
+    function distributeRewards() public onlyOwner notFrozen {
+        uint256 rewardPool = address(this).balance - totalStaked;
+        require(rewardPool > 0, "No rewards to distribute");
+
+        for (uint i = 0; i < stakers.length; i++) {
+            address user = stakers[i];
+            uint256 userStake = stakes[user].amount;
+            if (userStake > 0) {
+                uint256 reward = (userStake * rewardPool) / totalStaked;
+                payable(user).transfer(reward);
+                emit RewardDistributed(user, reward);
+            }
+        }
+    }
+
+    function getStakeAmount(address user) public view returns (uint256) {
+        return stakes[user].amount;
     }
 
     function transferOwnership(address payable newOwner) public onlyOwner {
@@ -63,11 +109,8 @@ contract Assessment {
         emit AccountFrozen(isFrozen);
     }
 
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a + b;
-    }
-
-    function subtract(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a - b;
+    function unfreezeAccount() public onlyOwner {
+        isFrozen = false;
+        emit AccountFrozen(isFrozen);
     }
 }
