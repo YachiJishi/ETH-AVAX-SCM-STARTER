@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import atm_abi from "../artifacts/contracts/Assessment.sol/Assessment.json";
+import AssessmentABI from "../artifacts/contracts/Assessment.sol/Assessment.json";
 
 export default function HomePage() {
   const [ethWallet, setEthWallet] = useState(undefined);
   const [account, setAccount] = useState(undefined);
-  const [atm, setATM] = useState(undefined);
+  const [contract, setContract] = useState(undefined);
   const [balance, setBalance] = useState(undefined);
   const [operation, setOperation] = useState("deposit");
   const [amount, setAmount] = useState(0);
   const [newOwnerAddress, setNewOwnerAddress] = useState("");
 
-  const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-  const atmABI = atm_abi.abi;
+  const contractAddress = "YOUR_CONTRACT_ADDRESS"; // Update with your actual contract address
+  const assessmentABI = AssessmentABI.abi;
 
   const getWallet = async () => {
     if (window.ethereum) {
@@ -43,20 +43,20 @@ export default function HomePage() {
     const accounts = await ethWallet.request({ method: "eth_requestAccounts" });
     handleAccount(accounts);
 
-    getATMContract();
+    getContract();
   };
 
-  const getATMContract = () => {
+  const getContract = () => {
     const provider = new ethers.providers.Web3Provider(ethWallet);
     const signer = provider.getSigner();
-    const atmContract = new ethers.Contract(contractAddress, atmABI, signer);
+    const contract = new ethers.Contract(contractAddress, assessmentABI, signer);
 
-    setATM(atmContract);
+    setContract(contract);
   };
 
   const getBalance = async () => {
-    if (atm) {
-      const balance = await atm.getBalance();
+    if (contract) {
+      const balance = await contract.getStakeAmount(account);
       setBalance(balance);
     }
   };
@@ -82,18 +82,18 @@ export default function HomePage() {
   };
 
   const deposit = async () => {
-    if (atm) {
+    if (contract) {
       let amountValue = ethers.utils.parseEther(amount.toString());
-      let tx = await atm.deposit(amountValue);
+      let tx = await contract.stake({ value: amountValue });
       await tx.wait();
       getBalance();
     }
   };
 
   const withdraw = async () => {
-    if (atm) {
+    if (contract) {
       let amountValue = ethers.utils.parseEther(amount.toString());
-      let tx = await atm.withdraw(amountValue);
+      let tx = await contract.unstake(amountValue);
       await tx.wait();
       getBalance();
     }
@@ -112,10 +112,10 @@ export default function HomePage() {
 
     const accounts = await ethWallet.request({ method: "eth_requestAccounts" });
     handleAccount(accounts);
-    getATMContract();
+    getContract();
 
     try {
-      await atm.transferOwnership(newOwnerAddress);
+      await contract.transferOwnership(newOwnerAddress);
       alert(`Ownership transferred successfully to ${newOwnerAddress}`);
     } catch (error) {
       alert(`Failed to transfer ownership: ${error.message}`);
@@ -123,8 +123,8 @@ export default function HomePage() {
   };
 
   const freezeAccount = async (freeze) => {
-    if (atm) {
-      let tx = await atm.freezeAccount(freeze);
+    if (contract) {
+      let tx = await contract.freezeAccount(freeze);
       await tx.wait();
       getBalance();
     }
@@ -151,7 +151,7 @@ export default function HomePage() {
       <div className="user-info">
         <p className="account-info">Your Account: {account}</p>
         <p className="balance-info">
-          Your Balance: {balance && ethers.utils.formatEther(balance)} ETH
+          Your Stake: {balance && ethers.utils.formatEther(balance)} ETH
         </p>
 
         <select className="operation-select" value={operation} onChange={handleOperationChange}>
