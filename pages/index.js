@@ -1,17 +1,19 @@
+
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import uniqueContract_abi from "../artifacts/contracts/UniqueContract.sol/UniqueContract.json";
+import atm_abi from "../artifacts/contracts/Assessment.sol/Assessment.json";
 
 export default function HomePage() {
   const [ethWallet, setEthWallet] = useState(undefined);
   const [account, setAccount] = useState(undefined);
-  const [contract, setContract] = useState(undefined);
+  const [atm, setATM] = useState(undefined);
   const [balance, setBalance] = useState(undefined);
-  const [tickets, setTickets] = useState(0);
+  const [operation, setOperation] = useState("deposit");
+  const [amount, setAmount] = useState(0);
   const [newOwnerAddress, setNewOwnerAddress] = useState("");
 
   const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-  const contractABI = uniqueContract_abi.abi;
+  const atmABI = atm_abi.abi;
 
   const getWallet = async () => {
     if (window.ethereum) {
@@ -26,7 +28,10 @@ export default function HomePage() {
 
   const handleAccount = (account) => {
     if (account) {
+      console.log("Account connected: ", account);
       setAccount(account);
+    } else {
+      console.log("No account found");
     }
   };
 
@@ -38,40 +43,58 @@ export default function HomePage() {
 
     const accounts = await ethWallet.request({ method: "eth_requestAccounts" });
     handleAccount(accounts);
-    getContract();
+
+    getATMContract();
   };
 
-  const getContract = () => {
+  const getATMContract = () => {
     const provider = new ethers.providers.Web3Provider(ethWallet);
     const signer = provider.getSigner();
-    const contractInstance = new ethers.Contract(contractAddress, contractABI, signer);
+    const atmContract = new ethers.Contract(contractAddress, atmABI, signer);
 
-    setContract(contractInstance);
+    setATM(atmContract);
   };
 
   const getBalance = async () => {
-    if (contract) {
-      const balance = await contract.balance();
+    if (atm) {
+      const balance = await atm.getBalance();
       setBalance(balance);
     }
   };
 
-  const handleTicketChange = (e) => {
-    setTickets(e.target.value);
+  const handleOperationChange = (e) => {
+    setOperation(e.target.value);
   };
 
-  const buyTickets = async () => {
-    if (contract) {
-      let ticketValue = ethers.utils.parseEther((tickets * 0.01).toString());
-      let tx = await contract.buyTickets(tickets, { value: ticketValue });
+  const handleAmountChange = (e) => {
+    setAmount(e.target.value);
+  };
+
+  const handleNewOwnerAddressChange = (e) => {
+    setNewOwnerAddress(e.target.value);
+  };
+
+  const handleOperation = async () => {
+    if (operation === "deposit") {
+      await deposit();
+    } else if (operation === "withdraw") {
+      await withdraw();
+    }
+  };
+
+  const deposit = async () => {
+    if (atm) {
+      let amountValue = ethers.utils.parseEther(amount.toString());
+      let tx = await atm.deposit(amountValue);
       await tx.wait();
       getBalance();
     }
   };
 
-  const drawWinner = async () => {
-    if (contract) {
-      let tx = await contract.drawWinner();
+  const withdraw = async () => {
+    if (atm) {
+      let amountValue = ethers.utils.parseEther(amount.toString());
+      let tx = await atm.withdraw(amountValue);
       await tx.wait();
       getBalance();
     }
@@ -90,11 +113,10 @@ export default function HomePage() {
 
     const accounts = await ethWallet.request({ method: "eth_requestAccounts" });
     handleAccount(accounts);
-    getContract();
+    getATMContract();
 
     try {
-      await contract.transferOwnership(newOwnerAddress);
-      setAccount(newOwnerAddress);
+      await atm.transferOwnership(newOwnerAddress);
       alert(`Ownership transferred successfully to ${newOwnerAddress}`);
     } catch (error) {
       alert(`Failed to transfer ownership: ${error.message}`);
@@ -103,7 +125,7 @@ export default function HomePage() {
 
   const initUser = () => {
     if (!ethWallet) {
-      return <p>Please install Metamask in order to use this application.</p>;
+      return <p>Please install Metamask in order to use this ATM.</p>;
     }
 
     if (!account) {
@@ -122,22 +144,23 @@ export default function HomePage() {
       <div className="user-info">
         <p className="account-info">Your Account: {account}</p>
         <p className="balance-info">
-          Contract Balance: {balance && ethers.utils.formatEther(balance)} ETH
+          Your Balance: {balance && ethers.utils.formatEther(balance)} ETH
         </p>
 
-        <input
-          className="tickets-input"
-          type="number"
-          value={tickets}
-          onChange={handleTicketChange}
-          placeholder="Enter number of tickets"
-        />
-        <button className="buy-tickets-button" onClick={buyTickets}>
-          Buy Tickets
-        </button>
+        <select className="operation-select" value={operation} onChange={handleOperationChange}>
+          <option value="deposit">Deposit</option>
+          <option value="withdraw">Withdraw</option>
+        </select>
 
-        <button className="draw-winner-button" onClick={drawWinner}>
-          Draw Winner
+        <input
+          className="amount-input"
+          type="number"
+          value={amount}
+          onChange={handleAmountChange}
+          placeholder={`Enter ${operation} amount`}
+        />
+        <button className="operation-button" onClick={handleOperation}>
+          {operation}
         </button>
 
         <div className="ownership-section">
@@ -145,7 +168,7 @@ export default function HomePage() {
             className="new-owner-input"
             type="text"
             value={newOwnerAddress}
-            onChange={(e) => setNewOwnerAddress(e.target.value)}
+            onChange={handleNewOwnerAddressChange}
             placeholder="Enter new owner address"
           />
           <button className="ownership-button" onClick={transferOwnership}>
@@ -163,7 +186,7 @@ export default function HomePage() {
   return (
     <main className="container">
       <header className="header">
-        <h1 className="title">Welcome to the Unique Contract App!</h1>
+        <h1 className="title">Welcome to the Metacrafters ATM!</h1>
       </header>
       {initUser()}
       <style jsx>{`
@@ -219,7 +242,13 @@ export default function HomePage() {
           margin-bottom: 1rem;
         }
 
-.tickets-input {
+        .operation-select {
+          font-size: 1rem;
+          padding: 0.5rem;
+          margin-right: 1rem;
+        }
+
+        .amount-input {
           padding: 0.5rem;
           font-size: 1rem;
           width: 10rem;
@@ -228,7 +257,7 @@ export default function HomePage() {
           border-radius: 4px;
         }
 
-        .buy-tickets-button {
+        .operation-button {
           background-color: #007bff;
           color: white;
           border: none;
@@ -238,23 +267,8 @@ export default function HomePage() {
           border-radius: 4px;
         }
 
-        .buy-tickets-button:hover {
+        .operation-button:hover {
           background-color: #0056b3;
-        }
-
-        .draw-winner-button {
-          background-color: #ff0000;
-          color: white;
-          border: none;
-          padding: 0.5rem 1rem;
-          font-size: 1rem;
-          cursor: pointer;
-          margin-top: 1rem;
-          border-radius: 4px;
-        }
-
-        .draw-winner-button:hover {
-          background-color: #cc0000;
         }
 
         .ownership-section {
@@ -287,4 +301,3 @@ export default function HomePage() {
     </main>
   );
 }
-
