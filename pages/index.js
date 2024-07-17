@@ -1,18 +1,17 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import AssessmentABI from "../artifacts/contracts/Assessment.sol/Assessment.json";
+import uniqueContract_abi from "../artifacts/contracts/UniqueContract.sol/UniqueContract.json";
 
 export default function HomePage() {
   const [ethWallet, setEthWallet] = useState(undefined);
   const [account, setAccount] = useState(undefined);
   const [contract, setContract] = useState(undefined);
   const [balance, setBalance] = useState(undefined);
-  const [operation, setOperation] = useState("deposit");
-  const [amount, setAmount] = useState(0);
+  const [tickets, setTickets] = useState(0);
   const [newOwnerAddress, setNewOwnerAddress] = useState("");
 
-  const contractAddress = "YOUR_CONTRACT_ADDRESS"; // Update with your actual contract address
-  const assessmentABI = AssessmentABI.abi;
+  const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+  const contractABI = uniqueContract_abi.abi;
 
   const getWallet = async () => {
     if (window.ethereum) {
@@ -26,11 +25,8 @@ export default function HomePage() {
   };
 
   const handleAccount = (account) => {
-    if (account.length > 0) {
-      console.log("Account connected: ", account[0]);
-      setAccount(account[0]);
-    } else {
-      console.log("No account found");
+    if (account) {
+      setAccount(account);
     }
   };
 
@@ -42,58 +38,40 @@ export default function HomePage() {
 
     const accounts = await ethWallet.request({ method: "eth_requestAccounts" });
     handleAccount(accounts);
-
     getContract();
   };
 
   const getContract = () => {
     const provider = new ethers.providers.Web3Provider(ethWallet);
     const signer = provider.getSigner();
-    const contract = new ethers.Contract(contractAddress, assessmentABI, signer);
+    const contractInstance = new ethers.Contract(contractAddress, contractABI, signer);
 
-    setContract(contract);
+    setContract(contractInstance);
   };
 
   const getBalance = async () => {
     if (contract) {
-      const balance = await contract.getStakeAmount(account);
+      const balance = await contract.balance();
       setBalance(balance);
     }
   };
 
-  const handleOperationChange = (e) => {
-    setOperation(e.target.value);
+  const handleTicketChange = (e) => {
+    setTickets(e.target.value);
   };
 
-  const handleAmountChange = (e) => {
-    setAmount(e.target.value);
-  };
-
-  const handleNewOwnerAddressChange = (e) => {
-    setNewOwnerAddress(e.target.value);
-  };
-
-  const handleOperation = async () => {
-    if (operation === "deposit") {
-      await deposit();
-    } else if (operation === "withdraw") {
-      await withdraw();
-    }
-  };
-
-  const deposit = async () => {
+  const buyTickets = async () => {
     if (contract) {
-      let amountValue = ethers.utils.parseEther(amount.toString());
-      let tx = await contract.stake({ value: amountValue });
+      let ticketValue = ethers.utils.parseEther((tickets * 0.01).toString());
+      let tx = await contract.buyTickets(tickets, { value: ticketValue });
       await tx.wait();
       getBalance();
     }
   };
 
-  const withdraw = async () => {
+  const drawWinner = async () => {
     if (contract) {
-      let amountValue = ethers.utils.parseEther(amount.toString());
-      let tx = await contract.unstake(amountValue);
+      let tx = await contract.drawWinner();
       await tx.wait();
       getBalance();
     }
@@ -116,23 +94,16 @@ export default function HomePage() {
 
     try {
       await contract.transferOwnership(newOwnerAddress);
+      setAccount(newOwnerAddress);
       alert(`Ownership transferred successfully to ${newOwnerAddress}`);
     } catch (error) {
       alert(`Failed to transfer ownership: ${error.message}`);
     }
   };
 
-  const freezeAccount = async (freeze) => {
-    if (contract) {
-      let tx = await contract.freezeAccount(freeze);
-      await tx.wait();
-      getBalance();
-    }
-  };
-
   const initUser = () => {
     if (!ethWallet) {
-      return <p>Please install Metamask in order to use this ATM.</p>;
+      return <p>Please install Metamask in order to use this application.</p>;
     }
 
     if (!account) {
@@ -151,23 +122,22 @@ export default function HomePage() {
       <div className="user-info">
         <p className="account-info">Your Account: {account}</p>
         <p className="balance-info">
-          Your Stake: {balance && ethers.utils.formatEther(balance)} ETH
+          Contract Balance: {balance && ethers.utils.formatEther(balance)} ETH
         </p>
 
-        <select className="operation-select" value={operation} onChange={handleOperationChange}>
-          <option value="deposit">Deposit</option>
-          <option value="withdraw">Withdraw</option>
-        </select>
-
         <input
-          className="amount-input"
+          className="tickets-input"
           type="number"
-          value={amount}
-          onChange={handleAmountChange}
-          placeholder={`Enter ${operation} amount`}
+          value={tickets}
+          onChange={handleTicketChange}
+          placeholder="Enter number of tickets"
         />
-        <button className="operation-button" onClick={handleOperation}>
-          {operation}
+        <button className="buy-tickets-button" onClick={buyTickets}>
+          Buy Tickets
+        </button>
+
+        <button className="draw-winner-button" onClick={drawWinner}>
+          Draw Winner
         </button>
 
         <div className="ownership-section">
@@ -175,20 +145,11 @@ export default function HomePage() {
             className="new-owner-input"
             type="text"
             value={newOwnerAddress}
-            onChange={handleNewOwnerAddressChange}
+            onChange={(e) => setNewOwnerAddress(e.target.value)}
             placeholder="Enter new owner address"
           />
           <button className="ownership-button" onClick={transferOwnership}>
             Transfer Ownership
-          </button>
-        </div>
-
-        <div className="freeze-section">
-          <button className="freeze-button" onClick={() => freezeAccount(true)}>
-            Freeze Account
-          </button>
-          <button className="unfreeze-button" onClick={() => freezeAccount(false)}>
-            Unfreeze Account
           </button>
         </div>
       </div>
@@ -202,7 +163,7 @@ export default function HomePage() {
   return (
     <main className="container">
       <header className="header">
-        <h1 className="title">Welcome to the Metacrafters ATM!</h1>
+        <h1 className="title">Welcome to the Unique Contract App!</h1>
       </header>
       {initUser()}
       <style jsx>{`
@@ -258,13 +219,7 @@ export default function HomePage() {
           margin-bottom: 1rem;
         }
 
-        .operation-select {
-          font-size: 1rem;
-          padding: 0.5rem;
-          margin-right: 1rem;
-        }
-
-        .amount-input {
+.tickets-input {
           padding: 0.5rem;
           font-size: 1rem;
           width: 10rem;
@@ -273,7 +228,7 @@ export default function HomePage() {
           border-radius: 4px;
         }
 
-        .operation-button {
+        .buy-tickets-button {
           background-color: #007bff;
           color: white;
           border: none;
@@ -283,8 +238,23 @@ export default function HomePage() {
           border-radius: 4px;
         }
 
-        .operation-button:hover {
+        .buy-tickets-button:hover {
           background-color: #0056b3;
+        }
+
+        .draw-winner-button {
+          background-color: #ff0000;
+          color: white;
+          border: none;
+          padding: 0.5rem 1rem;
+          font-size: 1rem;
+          cursor: pointer;
+          margin-top: 1rem;
+          border-radius: 4px;
+        }
+
+        .draw-winner-button:hover {
+          background-color: #cc0000;
         }
 
         .ownership-section {
@@ -313,28 +283,8 @@ export default function HomePage() {
         .ownership-button:hover {
           background-color: #e0a800;
         }
-
-        .freeze-section {
-          margin-top: 1rem;
-        }
-
-        .freeze-button,
-        .unfreeze-button {
-          background-color: #6c757d;
-          color: white;
-          border: none;
-          padding: 0.5rem 1rem;
-          font-size: 1rem;
-          cursor: pointer;
-          border-radius: 4px;
-          margin: 0 0.5rem;
-        }
-
-        .freeze-button:hover,
-        .unfreeze-button:hover {
-          background-color: #5a6268;
-        }
       `}</style>
     </main>
   );
 }
+
