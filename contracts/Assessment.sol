@@ -1,21 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
-contract UniqueContract {
+contract Assessment {
     address payable public owner;
     uint256 public balance;
     bool public isFrozen;
 
-    struct TicketHolder {
-        address account;
-        uint256 tickets;
-    }
-
-    TicketHolder[] public ticketHolders;
-    mapping(address => uint256) public tickets;
-
-    event TicketPurchased(address indexed buyer, uint256 tickets);
-    event LotteryWon(address indexed winner, uint256 amount);
+    event Deposit(uint256 amount);
+    event Withdraw(uint256 amount);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event AccountFrozen(bool isFrozen);
 
@@ -35,44 +27,26 @@ contract UniqueContract {
         _;
     }
 
-    function buyTickets(uint256 _tickets) public payable notFrozen {
-        require(_tickets > 0, "Must buy at least one ticket");
-        require(msg.value == _tickets * 0.01 ether, "Incorrect ether value sent");
-
-        balance += msg.value;
-        tickets[msg.sender] += _tickets;
-
-        bool found = false;
-        for (uint i = 0; i < ticketHolders.length; i++) {
-            if (ticketHolders[i].account == msg.sender) {
-                ticketHolders[i].tickets += _tickets;
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            ticketHolders.push(TicketHolder(msg.sender, _tickets));
-        }
-
-        emit TicketPurchased(msg.sender, _tickets);
+    function deposit(uint256 _amount) public payable onlyOwner notFrozen {
+        balance = add(balance, _amount);
+        emit Deposit(_amount);
     }
 
-    function drawWinner() public onlyOwner notFrozen {
-        require(ticketHolders.length > 0, "No tickets sold");
+    function getBalance() public view returns(uint256) {
+        return balance;
+    }
 
-        uint256 winnerIndex = random() % ticketHolders.length;
-        address winner = ticketHolders[winnerIndex].account;
-        uint256 prize = balance;
+    error InsufficientBalance(uint256 balance, uint256 withdrawAmount);
 
-        balance = 0;
-        payable(winner).transfer(prize);
-
-        delete ticketHolders;
-        for (uint i = 0; i < ticketHolders.length; i++) {
-            delete tickets[ticketHolders[i].account];
+    function withdraw(uint256 _withdrawAmount) public onlyOwner notFrozen {
+        if (balance < _withdrawAmount) {
+            revert InsufficientBalance({
+                balance: balance,
+                withdrawAmount: _withdrawAmount
+            });
         }
-
-        emit LotteryWon(winner, prize);
+        balance = subtract(balance, _withdrawAmount);
+        emit Withdraw(_withdrawAmount);
     }
 
     function transferOwnership(address payable newOwner) public onlyOwner {
@@ -89,7 +63,11 @@ contract UniqueContract {
         emit AccountFrozen(isFrozen);
     }
 
-    function random() private view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(block.difficulty, block.timestamp, ticketHolders.length)));
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a + b;
+    }
+
+    function subtract(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a - b;
     }
 }
