@@ -1,28 +1,27 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
-contract Assessment {
+contract UniqueContract {
     address payable public owner;
-    uint256 public totalStaked;
+    uint256 public balance;
     bool public isFrozen;
 
-    struct Stake {
-        uint256 amount;
-        uint256 lastStakeTime;
+    struct TicketHolder {
+        address account;
+        uint256 tickets;
     }
 
-    mapping(address => Stake) public stakes;
-    address[] public stakers; // Maintain a list of stakers
+    TicketHolder[] public ticketHolders;
+    mapping(address => uint256) public tickets;
 
-    event Staked(address indexed user, uint256 amount);
-    event Unstaked(address indexed user, uint256 amount);
+    event TicketPurchased(address indexed buyer, uint256 tickets);
+    event LotteryWon(address indexed winner, uint256 amount);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event AccountFrozen(bool isFrozen);
-    event RewardDistributed(address indexed user, uint256 reward);
 
-    constructor() {
-        owner = payable(msg.sender); // Use payable here to initialize owner
-        totalStaked = 0;
+    constructor(uint256 initBalance) payable {
+        owner = payable(msg.sender);
+        balance = initBalance;
         isFrozen = false;
     }
 
@@ -36,63 +35,44 @@ contract Assessment {
         _;
     }
 
-    receive() external payable {
-        revert("Contract does not accept direct payments");
-    }
+    function buyTickets(uint256 _tickets) public payable notFrozen {
+        require(_tickets > 0, "Must buy at least one ticket");
+        require(msg.value == _tickets * 0.01 ether, "Incorrect ether value sent");
 
-    function stake() public payable notFrozen {
-        require(msg.value > 0, "Stake amount must be greater than zero");
-        
-        stakes[msg.sender].amount += msg.value;
-        stakes[msg.sender].lastStakeTime = block.timestamp;
-        totalStaked += msg.value;
+        balance += msg.value;
+        tickets[msg.sender] += _tickets;
 
-        // Add the user to the list of stakers if not already added
-        if (stakes[msg.sender].amount == msg.value) {
-            stakers.push(msg.sender);
-        }
-
-        emit Staked(msg.sender, msg.value);
-    }
-
-    function unstake(uint256 _amount) public notFrozen {
-        require(stakes[msg.sender].amount >= _amount, "Insufficient staked balance");
-
-        stakes[msg.sender].amount -= _amount;
-        totalStaked -= _amount;
-        payable(msg.sender).transfer(_amount);
-
-        // Remove the user from the list of stakers if their stake becomes zero
-        if (stakes[msg.sender].amount == 0) {
-            for (uint i = 0; i < stakers.length; i++) {
-                if (stakers[i] == msg.sender) {
-                    stakers[i] = stakers[stakers.length - 1];
-                    stakers.pop();
-                    break;
-                }
+        bool found = false;
+        for (uint i = 0; i < ticketHolders.length; i++) {
+            if (ticketHolders[i].account == msg.sender) {
+                ticketHolders[i].tickets += _tickets;
+                found = true;
+                break;
             }
         }
-
-        emit Unstaked(msg.sender, _amount);
-    }
-
-    function distributeRewards() public onlyOwner notFrozen {
-        uint256 rewardPool = address(this).balance - totalStaked;
-        require(rewardPool > 0, "No rewards to distribute");
-
-        for (uint i = 0; i < stakers.length; i++) {
-            address user = stakers[i];
-            uint256 userStake = stakes[user].amount;
-            if (userStake > 0) {
-                uint256 reward = (userStake * rewardPool) / totalStaked;
-                payable(user).transfer(reward);
-                emit RewardDistributed(user, reward);
-            }
+        if (!found) {
+            ticketHolders.push(TicketHolder(msg.sender, _tickets));
         }
+
+        emit TicketPurchased(msg.sender, _tickets);
     }
 
-    function getStakeAmount(address user) public view returns (uint256) {
-        return stakes[user].amount;
+    function drawWinner() public onlyOwner notFrozen {
+        require(ticketHolders.length > 0, "No tickets sold");
+
+        uint256 winnerIndex = random() % ticketHolders.length;
+        address winner = ticketHolders[winnerIndex].account;
+        uint256 prize = balance;
+
+        balance = 0;
+        payable(winner).transfer(prize);
+
+        delete ticketHolders;
+        for (uint i = 0; i < ticketHolders.length; i++) {
+            delete tickets[ticketHolders[i].account];
+        }
+
+        emit LotteryWon(winner, prize);
     }
 
     function transferOwnership(address payable newOwner) public onlyOwner {
@@ -109,8 +89,7 @@ contract Assessment {
         emit AccountFrozen(isFrozen);
     }
 
-    function unfreezeAccount() public onlyOwner {
-        isFrozen = false;
-        emit AccountFrozen(isFrozen);
+    function random() private view returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(block.difficulty, block.timestamp, ticketHolders.length)));
     }
 }
