@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import atm_abi from "../artifacts/contracts/Assessment.sol/Assessment.json";
@@ -27,9 +26,9 @@ export default function HomePage() {
   };
 
   const handleAccount = (account) => {
-    if (account) {
-      console.log("Account connected: ", account);
-      setAccount(account);
+    if (account.length > 0) {
+      console.log("Account connected: ", account[0]);
+      setAccount(account[0]);
     } else {
       console.log("No account found");
     }
@@ -117,9 +116,19 @@ export default function HomePage() {
 
     try {
       await atm.transferOwnership(newOwnerAddress);
+      setAccount(newOwnerAddress); // Update the account state to the new owner's address
+      await getBalance(); // Update the balance for the new owner
       alert(`Ownership transferred successfully to ${newOwnerAddress}`);
     } catch (error) {
       alert(`Failed to transfer ownership: ${error.message}`);
+    }
+  };
+
+  const freezeAccount = async (freeze) => {
+    if (atm) {
+      let tx = await atm.freezeAccount(freeze);
+      await tx.wait();
+      getBalance();
     }
   };
 
@@ -173,6 +182,15 @@ export default function HomePage() {
           />
           <button className="ownership-button" onClick={transferOwnership}>
             Transfer Ownership
+          </button>
+        </div>
+
+        <div className="freeze-section">
+          <button className="freeze-button" onClick={() => freezeAccount(true)}>
+            Freeze Account
+          </button>
+          <button className="unfreeze-button" onClick={() => freezeAccount(false)}>
+            Unfreeze Account
           </button>
         </div>
       </div>
@@ -296,6 +314,27 @@ export default function HomePage() {
 
         .ownership-button:hover {
           background-color: #e0a800;
+        }
+
+        .freeze-section {
+          margin-top: 1rem;
+        }
+
+        .freeze-button,
+        .unfreeze-button {
+          background-color: #6c757d;
+          color: white;
+          border: none;
+          padding: 0.5rem 1rem;
+          font-size: 1rem;
+          cursor: pointer;
+          border-radius: 4px;
+          margin: 0 0.5rem;
+        }
+
+        .freeze-button:hover,
+        .unfreeze-button:hover {
+          background-color: #5a6268;
         }
       `}</style>
     </main>
